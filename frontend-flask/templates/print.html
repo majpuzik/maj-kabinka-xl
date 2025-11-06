@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Print - Virtual Fitting Room</title>
+    <style>
+        @media print {
+            @page { margin: 1cm; }
+            body { margin: 0; }
+            .no-print { display: none; }
+        }
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 210mm;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 20px;
+        }
+        .header h1 {
+            color: #667eea;
+            margin: 0;
+        }
+        .input-images {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin-bottom: 30px;
+        }
+        .input-image {
+            text-align: center;
+            flex: 1;
+        }
+        .input-image img {
+            max-width: 100%;
+            height: 200px;
+            object-fit: contain;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+        }
+        .input-image h3 {
+            margin: 10px 0 5px 0;
+            color: #2c3e50;
+        }
+        .result-section {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .result-section img {
+            max-width: 100%;
+            max-height: 400px;
+            border: 3px solid #667eea;
+            border-radius: 15px;
+        }
+        .metadata {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .metadata table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .metadata td {
+            padding: 8px;
+            border-bottom: 1px solid #ddd;
+        }
+        .metadata td:first-child {
+            font-weight: bold;
+            width: 150px;
+            color: #667eea;
+        }
+        .rating {
+            color: #f39c12;
+            font-size: 1.5rem;
+        }
+        .print-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 20px auto;
+            display: block;
+        }
+        .print-btn:hover {
+            background: #764ba2;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎨 Virtual Fitting Room</h1>
+        <p>AI-Powered Virtual Try-On Result</p>
+    </div>
+
+    <div class="input-images">
+        <div class="input-image">
+            <h3>🧍 Osoba</h3>
+            <p><strong>{{ generation.person_name }}</strong></p>
+            <img src="/{{ generation.person_image_path }}" alt="Person">
+        </div>
+
+        <div class="input-image">
+            <h3>👕 Oblečení</h3>
+            <p><strong>{{ generation.garment_name }}</strong></p>
+            <img src="/{{ generation.garment_image_path }}" alt="Garment">
+        </div>
+    </div>
+
+    <div class="result-section">
+        <h2 style="color: #27ae60;">✨ Výsledek Virtual Try-On</h2>
+        {% if generation.result_image_path %}
+        <img src="/{{ generation.result_image_path }}" alt="Result">
+        {% else %}
+        <p style="color: #e74c3c;">Výsledek není k dispozici</p>
+        {% endif %}
+    </div>
+
+    <div class="metadata">
+        <h3 style="color: #667eea; margin-top: 0;">📊 Metadata</h3>
+        <table>
+            <tr>
+                <td>Datum a čas:</td>
+                <td>{{ generation.created_at }}</td>
+            </tr>
+            <tr>
+                <td>ID generování:</td>
+                <td>#{{ generation.id }}</td>
+            </tr>
+            <tr>
+                <td>Typ generování:</td>
+                <td>{{ generation.generation_type }}</td>
+            </tr>
+            {% if generation.generation_time %}
+            <tr>
+                <td>Čas generování:</td>
+                <td>{{ "%.1f"|format(generation.generation_time) }} sekund</td>
+            </tr>
+            {% endif %}
+            {% if generation.cost > 0 %}
+            <tr>
+                <td>Cena:</td>
+                <td>${{ "%.2f"|format(generation.cost) }}</td>
+            </tr>
+            {% endif %}
+            {% if generation.rating > 0 %}
+            <tr>
+                <td>Hodnocení:</td>
+                <td class="rating">
+                    {% for i in range(generation.rating) %}★{% endfor %}
+                    ({{ generation.rating }}/5)
+                </td>
+            </tr>
+            {% endif %}
+        </table>
+    </div>
+
+    <button class="print-btn no-print" onclick="window.print()">🖨️ Tisknout</button>
+
+    <div style="text-align: center; color: #7f8c8d; font-size: 0.9rem; margin-top: 30px; border-top: 1px solid #ddd; padding-top: 20px;">
+        Generated by Virtual Fitting Room AI System
+    </div>
+</body>
+</html>

@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+{% block title %}Virtual Fitting Room - Vyzkoušejte si oblečení{% endblock %}
+{% block content %}
+<div class="card">
+    <h2 style="text-align: center; margin-bottom: 2rem; color: #2c3e50;">👔 Nahrajte fotky a vyzkoušejte si oblečení</h2>
+
+    <div id="upload-status" class="alert" style="display: none;"></div>
+
+    <form id="upload-form" enctype="multipart/form-data">
+        <div class="upload-grid">
+            <!-- Fotka osoby -->
+            <div>
+                <h3 style="text-align: center; margin-bottom: 1rem; color: #667eea;">🧍 Vaše fotka</h3>
+                <div class="upload-area" id="person-area">
+                    <div class="upload-icon">📷</div>
+                    <p style="font-weight: 600; margin-bottom: 0.5rem;">Přetáhněte fotku osoby sem</p>
+                    <p style="font-size: 0.9rem; color: #7f8c8d;">nebo klikněte pro výběr</p>
+                    <input type="file" id="person-image" name="person_image" accept="image/*" style="display: none;">
+                    <img id="person-preview" class="preview-image" style="display: none;">
+                </div>
+            </div>
+
+            <!-- Fotka oblečení -->
+            <div>
+                <h3 style="text-align: center; margin-bottom: 1rem; color: #764ba2;">👕 Oblečení</h3>
+                <div class="upload-area" id="garment-area">
+                    <div class="upload-icon">👔</div>
+                    <p style="font-weight: 600; margin-bottom: 0.5rem;">Přetáhněte fotku oblečení sem</p>
+                    <p style="font-size: 0.9rem; color: #7f8c8d;">nebo klikněte pro výběr</p>
+                    <input type="file" id="garment-image" name="garment_image" accept="image/*" style="display: none;">
+                    <img id="garment-preview" class="preview-image" style="display: none;">
+                </div>
+            </div>
+        </div>
+
+        <div class="checkbox-group" style="justify-content: center;">
+            <input type="checkbox" id="use-ollama" name="use_ollama" checked>
+            <label for="use-ollama">🤖 Použít Ollama pro AI vylepšení promptu</label>
+        </div>
+
+        <div id="progress" class="progress" style="display: none;">
+            <div class="progress-bar" id="progress-bar" style="width: 0%;"></div>
+        </div>
+
+        <div style="text-align: center;">
+            <button type="submit" class="btn" id="upload-btn" disabled>
+                ✨ Vygenerovat Virtual Try-On
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Result Section -->
+<div id="result-section" class="card" style="display: none;">
+    <h2 style="text-align: center; margin-bottom: 2rem; color: #2c3e50;">🎉 Výsledek</h2>
+
+    <div class="result-grid">
+        <div style="text-align: center;">
+            <h3 style="color: #667eea; margin-bottom: 1rem;">Původní fotka</h3>
+            <img id="result-person" class="result-image" style="width: 100%;">
+        </div>
+
+        <div style="text-align: center;">
+            <h3 style="color: #27ae60; margin-bottom: 1rem;">✨ Virtual Try-On</h3>
+            <img id="result-output" class="result-image" style="width: 100%;">
+        </div>
+
+        <div style="text-align: center;">
+            <h3 style="color: #764ba2; margin-bottom: 1rem;">Oblečení</h3>
+            <img id="result-garment" class="result-image" style="width: 100%;">
+        </div>
+    </div>
+
+    <div id="result-analysis" style="margin-top: 2rem; padding: 1.5rem; background: rgba(102, 126, 234, 0.05); border-radius: 15px;">
+        <!-- Analysis info will be added here -->
+    </div>
+
+    <div style="text-align: center; margin-top: 2rem;">
+        <button class="btn" onclick="location.reload()">🔄 Zkusit další</button>
+    </div>
+</div>
+
+<div class="card">
+    <h2 style="color: #2c3e50; margin-bottom: 1.5rem;">ℹ️ Jak to funguje</h2>
+    <ol style="line-height: 2; font-size: 1.05rem;">
+        <li><strong>Nahrajte fotku osoby:</strong> Ideálně celá postava, čistý snímek</li>
+        <li><strong>Nahrajte oblečení:</strong> Fotka oblečení, které chcete vyzkoušet</li>
+        <li><strong>AI zpracování:</strong> Náš AI model kombinuje fotky a vytvoří realistický výsledek</li>
+        <li><strong>Výsledek:</strong> Uvidíte, jak by oblečení vypadalo na osobě</li>
+    </ol>
+
+    <div style="margin-top: 2rem; padding: 1.5rem; background: rgba(52, 152, 219, 0.1); border-radius: 15px; border-left: 5px solid #3498db;">
+        <p style="margin: 0; font-weight: 500;">
+            💡 <strong>Tip:</strong> Pro nejlepší výsledky používejte fotky s dobrým osvětlením a minimálním pozadím.
+        </p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+const personArea = document.getElementById('person-area');
+const garmentArea = document.getElementById('garment-area');
+const personInput = document.getElementById('person-image');
+const garmentInput = document.getElementById('garment-image');
+const personPreview = document.getElementById('person-preview');
+const garmentPreview = document.getElementById('garment-preview');
+const uploadForm = document.getElementById('upload-form');
+const uploadBtn = document.getElementById('upload-btn');
+const progress = document.getElementById('progress');
+const progressBar = document.getElementById('progress-bar');
+const status = document.getElementById('upload-status');
+const resultSection = document.getElementById('result-section');
+
+// Setup drag & drop and click for person image
+setupUploadArea(personArea, personInput, personPreview, '🧍 Vaše fotka');
+setupUploadArea(garmentArea, garmentInput, garmentPreview, '👕 Oblečení');
+
+function setupUploadArea(area, input, preview, title) {
+    // Click to select
+    area.addEventListener('click', () => input.click());
+
+    // Drag & drop
+    area.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        area.classList.add('dragover');
+    });
+
+    area.addEventListener('dragleave', () => {
+        area.classList.remove('dragover');
+    });
+
+    area.addEventListener('drop', (e) => {
+        e.preventDefault();
+        area.classList.remove('dragover');
+
+        if (e.dataTransfer.files.length) {
+            input.files = e.dataTransfer.files;
+            handleFileSelect(input.files[0], preview, area);
+        }
+    });
+
+    // File select
+    input.addEventListener('change', (e) => {
+        if (e.target.files.length) {
+            handleFileSelect(e.target.files[0], preview, area);
+        }
+    });
+}
+
+function handleFileSelect(file, preview, area) {
+    // Validate
+    if (!file.type.startsWith('image/')) {
+        showStatus('❌ Vyberte prosím obrázek!', 'error');
+        return;
+    }
+
+    if (file.size > 50 * 1024 * 1024) {
+        showStatus('❌ Soubor je příliš velký (max 50MB)!', 'error');
+        return;
+    }
+
+    // Show preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        preview.src = e.target.result;
+        preview.style.display = 'block';
+        area.classList.add('has-image');
+
+        // Enable button if both images are selected
+        if (personInput.files.length && garmentInput.files.length) {
+            uploadBtn.disabled = false;
+            showStatus('✅ Obě fotky připraveny! Můžete generovat.', 'success');
+        }
+    };
+    reader.readAsDataURL(file);
+}
+
+function showStatus(message, type) {
+    status.textContent = message;
+    status.className = `alert alert-${type}`;
+    status.style.display = 'block';
+
+    // Auto-hide after 5 seconds
+    setTimeout(() => {
+        if (type !== 'info') {
+            status.style.display = 'none';
+        }
+    }, 5000);
+}
+
+// Form submission
+uploadForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    if (!personInput.files.length || !garmentInput.files.length) {
+        showStatus('❌ Vyberte prosím obě fotky!', 'error');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('person_image', personInput.files[0]);
+    formData.append('garment_image', garmentInput.files[0]);
+    formData.append('use_ollama', document.getElementById('use-ollama').checked);
+
+    uploadBtn.disabled = true;
+    progress.style.display = 'block';
+    showStatus('⏳ Generování virtual try-on... Může to trvat 30-60 sekund.', 'info');
+
+    let progressInterval = setInterval(() => {
+        let currentWidth = parseInt(progressBar.style.width) || 0;
+        if (currentWidth < 90) {
+            progressBar.style.width = (currentWidth + 2) + '%';
+        }
+    }, 1000);
+
+    try {
+        const response = await fetch('/upload', {
+            method: 'POST',
+            body: formData
+        });
+
+        clearInterval(progressInterval);
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            progressBar.style.width = '100%';
+            showStatus('✅ ' + result.message, 'success');
+
+            // Show results
+            displayResults(result.result);
+
+            // Scroll to results
+            setTimeout(() => {
+                resultSection.scrollIntoView({ behavior: 'smooth' });
+            }, 500);
+        } else {
+            showStatus('❌ ' + (result.error || 'Chyba při generování'), 'error');
+            progressBar.style.width = '0%';
+        }
+    } catch (error) {
+        clearInterval(progressInterval);
+        showStatus('❌ Chyba: ' + error.message, 'error');
+        progressBar.style.width = '0%';
+    } finally {
+        uploadBtn.disabled = false;
+    }
+});
+
+function displayResults(result) {
+    // Show result section
+    resultSection.style.display = 'block';
+
+    // Display images
+    document.getElementById('result-person').src = personPreview.src;
+    document.getElementById('result-garment').src = garmentPreview.src;
+    document.getElementById('result-output').src = 'http://localhost:8000' + result.result_url;
+
+    // Display analysis if available
+    const analysisDiv = document.getElementById('result-analysis');
+    if (result.garment_analysis || result.enhanced_prompt) {
+        let html = '<h3 style="color: #667eea; margin-bottom: 1rem;">🤖 AI Analýza</h3>';
+
+        if (result.garment_analysis) {
+            html += `<p><strong>Popis oblečení:</strong> ${result.garment_analysis}</p>`;
+        }
+
+        if (result.enhanced_prompt) {
+            html += `<p style="margin-top: 1rem;"><strong>AI Prompt:</strong> ${result.enhanced_prompt}</p>`;
+        }
+
+        analysisDiv.innerHTML = html;
+    } else {
+        analysisDiv.style.display = 'none';
+    }
+}
+{% endblock %}

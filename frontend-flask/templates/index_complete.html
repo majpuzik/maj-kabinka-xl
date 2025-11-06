@@ -1,0 +1,618 @@
+{% extends "base.html" %}
+{% block title %}Virtual Fitting Room - Complete{% endblock %}
+{% block content %}
+<style>
+.main-layout {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 2rem;
+}
+.sidebar {
+    background: rgba(255,255,255,0.95);
+    border-radius: 20px;
+    padding: 1.5rem;
+    max-height: calc(100vh - 250px);
+    overflow-y: auto;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+}
+.sidebar h3 {
+    color: #667eea;
+    margin-bottom: 1rem;
+    font-size: 1.2rem;
+}
+.history-item {
+    background: rgba(102, 126, 234, 0.05);
+    border-radius: 10px;
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+    cursor: pointer;
+    transition: all 0.3s;
+    border-left: 4px solid #667eea;
+}
+.history-item:hover {
+    background: rgba(102, 126, 234, 0.15);
+    transform: translateX(5px);
+}
+.history-item .name {
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 0.25rem;
+}
+.history-item .meta {
+    font-size: 0.85rem;
+    color: #7f8c8d;
+}
+.history-item .rating {
+    color: #f39c12;
+    font-size: 1.1rem;
+}
+.webcam-modal {
+    display: none;
+    position: fixed;
+    z-index: 2000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.8);
+    backdrop-filter: blur(10px);
+}
+.webcam-content {
+    background: white;
+    margin: 5% auto;
+    padding: 2rem;
+    border-radius: 20px;
+    width: 90%;
+    max-width: 800px;
+    text-align: center;
+}
+.webcam-content video {
+    width: 100%;
+    max-width: 640px;
+    border-radius: 15px;
+    margin: 1rem 0;
+}
+.variants-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
+}
+.variant-option {
+    position: relative;
+    background: rgba(102, 126, 234, 0.05);
+    border: 3px solid transparent;
+    border-radius: 15px;
+    padding: 1rem;
+    cursor: pointer;
+    transition: all 0.3s;
+    text-align: center;
+}
+.variant-option:hover {
+    background: rgba(102, 126, 234, 0.1);
+}
+.variant-option.selected {
+    border-color: #667eea;
+    background: rgba(102, 126, 234, 0.15);
+}
+.variant-option .price {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #667eea;
+    margin-top: 0.5rem;
+}
+.variant-option .badge {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    background: #e74c3c;
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: bold;
+}
+.star-rating {
+    display: inline-flex;
+    gap: 0.25rem;
+    font-size: 1.5rem;
+    cursor: pointer;
+}
+.star-rating .star {
+    color: #ddd;
+    transition: color 0.2s;
+}
+.star-rating .star.filled {
+    color: #f39c12;
+}
+.star-rating .star:hover,
+.star-rating .star:hover ~ .star {
+    color: #f39c12;
+}
+</style>
+
+<div class="main-layout">
+    <!-- Sidebar: History -->
+    <div class="sidebar">
+        <h3>📚 Historie generování</h3>
+        <div id="history-list">
+            {% for gen in generations[:10] %}
+            <div class="history-item" onclick="loadGeneration({{ gen.id }})">
+                <div class="name">{{ gen.person_name }} + {{ gen.garment_name }}</div>
+                <div class="meta">
+                    {{ gen.created_at[:16] }}
+                    {% if gen.generation_time %}
+                    | {{ "%.1f"|format(gen.generation_time) }}s
+                    {% endif %}
+                    {% if gen.cost > 0 %}
+                    | ${{ "%.2f"|format(gen.cost) }}
+                    {% endif %}
+                </div>
+                {% if gen.rating > 0 %}
+                <div class="rating">
+                    {% for i in range(gen.rating) %}★{% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div>
+        <div class="card">
+            <h2 style="text-align: center; margin-bottom: 2rem; color: #2c3e50;">
+                👔 Virtual Fitting Room - Kompletní Verze
+            </h2>
+
+            <div id="upload-status" class="alert" style="display: none;"></div>
+
+            <form id="upload-form" enctype="multipart/form-data">
+                <!-- Generation Variants -->
+                <div style="margin-bottom: 2rem;">
+                    <h3 style="color: #667eea; margin-bottom: 1rem;">🎯 Typ generování</h3>
+                    <div class="variants-grid">
+                        {% for variant in variants %}
+                        <label class="variant-option {{ 'selected' if loop.first else '' }}">
+                            <input type="radio" name="generation_type" value="{{ variant.name }}"
+                                   {% if loop.first %}checked{% endif %} style="display: none;">
+                            <div style="font-weight: 600;">{{ variant.display_name }}</div>
+                            <div class="price">
+                                {% if variant.is_paid %}
+                                    ${{ "%.2f"|format(variant.cost_per_generation) }}
+                                {% else %}
+                                    FREE
+                                {% endif %}
+                            </div>
+                            <div style="font-size: 0.85rem; color: #7f8c8d; margin-top: 0.5rem;">
+                                ~{{ variant.avg_time|int }}s
+                            </div>
+                            {% if variant.is_paid %}
+                            <span class="badge">PAID</span>
+                            {% endif %}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="upload-grid">
+                    <!-- Person -->
+                    <div>
+                        <h3 style="text-align: center; margin-bottom: 1rem; color: #667eea;">
+                            🧍 Osoba
+                        </h3>
+
+                        <div class="form-group">
+                            <input type="text" name="person_name" id="person-name"
+                                   class="form-control" placeholder="Jméno osoby..." required>
+                        </div>
+
+                        <div class="upload-area" id="person-area">
+                            <div class="upload-icon">📷</div>
+                            <p style="font-weight: 600; margin-bottom: 0.5rem;">Fotka osoby</p>
+                            <p style="font-size: 0.9rem; color: #7f8c8d;">Přetáhni nebo vyber</p>
+                            <input type="file" id="person-image" name="person_image" accept="image/*" style="display: none;">
+                            <input type="hidden" id="person-webcam-data" name="person_webcam">
+                            <img id="person-preview" class="preview-image" style="display: none;">
+                        </div>
+
+                        <div style="text-align: center; margin-top: 1rem;">
+                            <button type="button" class="btn" onclick="openWebcam('person')" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
+                                📸 Webcam
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Garment -->
+                    <div>
+                        <h3 style="text-align: center; margin-bottom: 1rem; color: #764ba2;">
+                            👕 Oblečení
+                        </h3>
+
+                        <div class="form-group">
+                            <input type="text" name="garment_name" id="garment-name"
+                                   class="form-control" placeholder="Název oblečení..." required>
+                        </div>
+
+                        <div class="upload-area" id="garment-area">
+                            <div class="upload-icon">👔</div>
+                            <p style="font-weight: 600; margin-bottom: 0.5rem;">Fotka oblečení</p>
+                            <p style="font-size: 0.9rem; color: #7f8c8d;">Přetáhni, vyber, nebo URL</p>
+                            <input type="file" id="garment-image" name="garment_image" accept="image/*" style="display: none;">
+                            <input type="hidden" id="garment-webcam-data" name="garment_webcam">
+                            <img id="garment-preview" class="preview-image" style="display: none;">
+                        </div>
+
+                        <div class="form-group" style="margin-top: 1rem;">
+                            <input type="url" name="garment_url" id="garment-url"
+                                   class="form-control" placeholder="🔗 URL obrázku oblečení...">
+                        </div>
+
+                        <div style="text-align: center; margin-top: 1rem; display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
+                            <button type="button" class="btn" onclick="openWebcam('garment')" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
+                                📸 Webcam
+                            </button>
+                            <label class="checkbox-group" style="margin: 0;">
+                                <input type="checkbox" id="remove-bg" name="remove_background" value="true">
+                                <span style="font-size: 0.9rem;">🎨 Odstranit pozadí</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="checkbox-group" style="justify-content: center; margin-top: 1.5rem;">
+                    <input type="checkbox" id="use-ollama" name="use_ollama" checked>
+                    <label for="use-ollama">🤖 Použít Ollama AI vylepšení</label>
+                </div>
+
+                <div id="progress" class="progress" style="display: none;">
+                    <div class="progress-bar" id="progress-bar" style="width: 0%;"></div>
+                </div>
+
+                <div style="text-align: center;">
+                    <button type="submit" class="btn" id="upload-btn" disabled>
+                        ✨ Vygenerovat Virtual Try-On
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Result Section -->
+        <div id="result-section" class="card" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                <h2 style="color: #2c3e50; margin: 0;">🎉 Výsledek</h2>
+                <div style="display: flex; gap: 1rem; align-items: center;">
+                    <div class="star-rating" id="result-rating">
+                        <span class="star" data-rating="1">★</span>
+                        <span class="star" data-rating="2">★</span>
+                        <span class="star" data-rating="3">★</span>
+                        <span class="star" data-rating="4">★</span>
+                        <span class="star" data-rating="5">★</span>
+                    </div>
+                    <button class="btn" onclick="printResult()" style="padding: 0.5rem 1.5rem;">
+                        🖨️ Tisknout
+                    </button>
+                </div>
+            </div>
+
+            <div class="result-grid">
+                <div style="text-align: center;">
+                    <h3 style="color: #667eea; margin-bottom: 1rem;">Původní</h3>
+                    <img id="result-person" class="result-image" style="width: 100%;">
+                </div>
+
+                <div style="text-align: center;">
+                    <h3 style="color: #27ae60; margin-bottom: 1rem;">✨ Virtual Try-On</h3>
+                    <img id="result-output" class="result-image" style="width: 100%;">
+                </div>
+
+                <div style="text-align: center;">
+                    <h3 style="color: #764ba2; margin-bottom: 1rem;">Oblečení</h3>
+                    <img id="result-garment" class="result-image" style="width: 100%;">
+                </div>
+            </div>
+
+            <div id="result-meta" style="margin-top: 2rem; padding: 1.5rem; background: rgba(102, 126, 234, 0.05); border-radius: 15px;">
+                <!-- Metadata will be inserted here -->
+            </div>
+
+            <div style="text-align: center; margin-top: 2rem;">
+                <button class="btn" onclick="location.reload()">🔄 Nové generování</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Webcam Modal -->
+<div id="webcam-modal" class="webcam-modal">
+    <div class="webcam-content">
+        <h2 style="color: #667eea; margin-bottom: 1rem;">📸 Webcam</h2>
+        <video id="webcam-video" autoplay playsinline></video>
+        <canvas id="webcam-canvas" style="display: none;"></canvas>
+        <div style="margin-top: 1.5rem; display: flex; gap: 1rem; justify-content: center;">
+            <button class="btn" onclick="captureWebcam()">📷 Vyfotit</button>
+            <button class="btn" onclick="closeWebcam()" style="background: #95a5a6;">✖ Zrušit</button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+let currentWebcamTarget = null;
+let webcamStream = null;
+let currentGenerationId = null;
+
+// Variant selection
+document.querySelectorAll('.variant-option').forEach(option => {
+    option.addEventListener('click', function() {
+        document.querySelectorAll('.variant-option').forEach(o => o.classList.remove('selected'));
+        this.classList.add('selected');
+        this.querySelector('input[type="radio"]').checked = true;
+    });
+});
+
+// Setup upload areas
+setupUploadArea(document.getElementById('person-area'), document.getElementById('person-image'), document.getElementById('person-preview'), 'person');
+setupUploadArea(document.getElementById('garment-area'), document.getElementById('garment-image'), document.getElementById('garment-preview'), 'garment');
+
+// URL input for garment
+document.getElementById('garment-url').addEventListener('change', async function() {
+    if (this.value) {
+        const preview = document.getElementById('garment-preview');
+        preview.src = this.value;
+        preview.style.display = 'block';
+        document.getElementById('garment-area').classList.add('has-image');
+        checkFormReady();
+    }
+});
+
+// Setup upload area function
+function setupUploadArea(area, input, preview, type) {
+    area.addEventListener('click', () => input.click());
+
+    area.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        area.classList.add('dragover');
+    });
+
+    area.addEventListener('dragleave', () => {
+        area.classList.remove('dragover');
+    });
+
+    area.addEventListener('drop', (e) => {
+        e.preventDefault();
+        area.classList.remove('dragover');
+        if (e.dataTransfer.files.length) {
+            input.files = e.dataTransfer.files;
+            handleFileSelect(input.files[0], preview, area);
+        }
+    });
+
+    input.addEventListener('change', (e) => {
+        if (e.target.files.length) {
+            handleFileSelect(e.target.files[0], preview, area);
+        }
+    });
+}
+
+function handleFileSelect(file, preview, area) {
+    if (!file.type.startsWith('image/')) {
+        showStatus('❌ Vyberte prosím obrázek!', 'error');
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        preview.src = e.target.result;
+        preview.style.display = 'block';
+        area.classList.add('has-image');
+        checkFormReady();
+    };
+    reader.readAsDataURL(file);
+}
+
+function checkFormReady() {
+    const personReady = document.getElementById('person-image').files.length > 0 ||
+                       document.getElementById('person-webcam-data').value ||
+                       document.getElementById('person-preview').src;
+
+    const garmentReady = document.getElementById('garment-image').files.length > 0 ||
+                        document.getElementById('garment-webcam-data').value ||
+                        document.getElementById('garment-url').value ||
+                        document.getElementById('garment-preview').src;
+
+    document.getElementById('upload-btn').disabled = !(personReady && garmentReady);
+}
+
+function showStatus(message, type) {
+    const status = document.getElementById('upload-status');
+    status.textContent = message;
+    status.className = `alert alert-${type}`;
+    status.style.display = 'block';
+
+    if (type !== 'info') {
+        setTimeout(() => status.style.display = 'none', 5000);
+    }
+}
+
+// Webcam functions
+function openWebcam(target) {
+    currentWebcamTarget = target;
+    const modal = document.getElementById('webcam-modal');
+    const video = document.getElementById('webcam-video');
+
+    modal.style.display = 'block';
+
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false })
+        .then(stream => {
+            webcamStream = stream;
+            video.srcObject = stream;
+        })
+        .catch(err => {
+            showStatus('❌ Nelze aktivovat webcam: ' + err.message, 'error');
+            closeWebcam();
+        });
+}
+
+function captureWebcam() {
+    const video = document.getElementById('webcam-video');
+    const canvas = document.getElementById('webcam-canvas');
+    const ctx = canvas.getContext('2d');
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0);
+
+    const imageData = canvas.toDataURL('image/jpeg', 0.9);
+
+    if (currentWebcamTarget === 'person') {
+        document.getElementById('person-webcam-data').value = imageData;
+        document.getElementById('person-preview').src = imageData;
+        document.getElementById('person-preview').style.display = 'block';
+        document.getElementById('person-area').classList.add('has-image');
+    } else {
+        document.getElementById('garment-webcam-data').value = imageData;
+        document.getElementById('garment-preview').src = imageData;
+        document.getElementById('garment-preview').style.display = 'block';
+        document.getElementById('garment-area').classList.add('has-image');
+    }
+
+    checkFormReady();
+    closeWebcam();
+}
+
+function closeWebcam() {
+    if (webcamStream) {
+        webcamStream.getTracks().forEach(track => track.stop());
+        webcamStream = null;
+    }
+    document.getElementById('webcam-modal').style.display = 'none';
+}
+
+// Form submission
+document.getElementById('upload-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const formData = new FormData(e.target);
+    const uploadBtn = document.getElementById('upload-btn');
+    const progress = document.getElementById('progress');
+    const progressBar = document.getElementById('progress-bar');
+
+    uploadBtn.disabled = true;
+    progress.style.display = 'block';
+    showStatus('⏳ Generování... Může to trvat 30-90 sekund.', 'info');
+
+    let progressInterval = setInterval(() => {
+        let currentWidth = parseInt(progressBar.style.width) || 0;
+        if (currentWidth < 90) {
+            progressBar.style.width = (currentWidth + 1) + '%';
+        }
+    }, 1000);
+
+    try {
+        const response = await fetch('/upload', {
+            method: 'POST',
+            body: formData
+        });
+
+        clearInterval(progressInterval);
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            progressBar.style.width = '100%';
+            showStatus('✅ ' + result.message, 'success');
+            currentGenerationId = result.generation_id;
+            displayResults(result);
+            setTimeout(() => location.reload(), 500); // Refresh to update history
+        } else {
+            showStatus('❌ ' + (result.error || 'Chyba při generování'), 'error');
+            progressBar.style.width = '0%';
+        }
+    } catch (error) {
+        clearInterval(progressInterval);
+        showStatus('❌ Chyba: ' + error.message, 'error');
+        progressBar.style.width = '0%';
+    } finally {
+        uploadBtn.disabled = false;
+    }
+});
+
+function displayResults(result) {
+    document.getElementById('result-section').style.display = 'block';
+    document.getElementById('result-person').src = document.getElementById('person-preview').src;
+    document.getElementById('result-garment').src = document.getElementById('garment-preview').src;
+    document.getElementById('result-output').src = result.result.result_url;
+
+    const metaDiv = document.getElementById('result-meta');
+    metaDiv.innerHTML = `
+        <h3 style="color: #667eea; margin-bottom: 1rem;">📊 Statistiky</h3>
+        <p><strong>⏱️ Čas generování:</strong> ${result.generation_time.toFixed(1)}s</p>
+        ${result.cost > 0 ? `<p><strong>💰 Cena:</strong> $${result.cost.toFixed(2)}</p>` : ''}
+        <p><strong>🆔 ID:</strong> #${result.generation_id}</p>
+    `;
+
+    setupRating(currentGenerationId, 0);
+    document.getElementById('result-section').scrollIntoView({ behavior: 'smooth' });
+}
+
+function setupRating(genId, currentRating) {
+    const stars = document.querySelectorAll('#result-rating .star');
+
+    // Set current rating
+    stars.forEach((star, index) => {
+        if (index < currentRating) {
+            star.classList.add('filled');
+        } else {
+            star.classList.remove('filled');
+        }
+    });
+
+    // Add click handlers
+    stars.forEach(star => {
+        star.onclick = async () => {
+            const rating = parseInt(star.dataset.rating);
+            const response = await fetch(`/api/generation/${genId}/rating`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rating })
+            });
+
+            if (response.ok) {
+                setupRating(genId, rating);
+                showStatus('✅ Hodnocení uloženo!', 'success');
+            }
+        };
+    });
+}
+
+async function loadGeneration(genId) {
+    const response = await fetch(`/api/generation/${genId}`);
+    const gen = await response.json();
+
+    document.getElementById('person-name').value = gen.person_name;
+    document.getElementById('garment-name').value = gen.garment_name;
+
+    // Load images
+    if (gen.person_image_path) {
+        document.getElementById('person-preview').src = '/' + gen.person_image_path;
+        document.getElementById('person-preview').style.display = 'block';
+        document.getElementById('person-area').classList.add('has-image');
+    }
+
+    if (gen.garment_image_path) {
+        document.getElementById('garment-preview').src = '/' + gen.garment_image_path;
+        document.getElementById('garment-preview').style.display = 'block';
+        document.getElementById('garment-area').classList.add('has-image');
+    }
+
+    checkFormReady();
+    showStatus('✅ Načteno z historie!', 'success');
+}
+
+function printResult() {
+    if (currentGenerationId) {
+        window.open(`/print/${currentGenerationId}`, '_blank');
+    }
+}
+{% endblock %}

@@ -1,0 +1,39 @@
+# Core dependencies
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# AI/ML
+# IMPORTANT: Install PyTorch separately based on your platform:
+#
+# For Mac M1/M2/M3/M4 (Apple Silicon):
+#   pip install torch torchvision torchaudio
+#
+# For NVIDIA GPU (CUDA 11.8):
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+#
+# For CPU only:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+#
+# torch>=2.0.0  # Install manually as above
+# torchvision>=0.15.0  # Install manually as above
+diffusers==0.25.0
+transformers==4.36.2
+accelerate==0.25.0
+
+# Image processing
+Pillow==10.1.0
+opencv-python==4.8.1.78
+segment-anything @ git+https://github.com/facebookresearch/segment-anything.git
+
+# Pose detection
+mediapipe==0.10.9
+
+# Utils
+requests==2.31.0
+numpy==1.24.3
+aiofiles==23.2.1
+
+# Optional: 3D
+# trimesh==4.0.8
+# smplx @ git+https://github.com/vchoutas/smplx.git
