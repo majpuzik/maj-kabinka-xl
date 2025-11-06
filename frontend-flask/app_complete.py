@@ -113,7 +113,12 @@ def upload():
                 logger.info(f"🔄 Konvertuji {original_filename} na JPG...")
                 from PIL import Image
                 import io
-                img = Image.open(garment_file.stream).convert('RGB')
+
+                # Read stream into memory and seek to beginning
+                garment_file.stream.seek(0)
+                image_bytes = garment_file.stream.read()
+                img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+
                 garment_filename = f"{uuid.uuid4()}.jpg"
                 garment_path = os.path.join(app.config['UPLOAD_FOLDER'], garment_filename)
                 img.save(garment_path, 'JPEG', quality=95)
