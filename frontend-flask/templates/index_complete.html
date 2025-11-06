@@ -129,6 +129,14 @@
 .star-rating .star:hover ~ .star {
     color: #f39c12;
 }
+/* Smaller input areas for better layout */
+.upload-area {
+    padding: 1.5rem !important;
+    min-height: 180px;
+}
+.upload-icon {
+    font-size: 2.5rem !important;
+}
 </style>
 
 <div class="main-layout">
@@ -139,14 +147,16 @@
             {% for gen in generations[:10] %}
             <div class="history-item" onclick="loadGeneration({{ gen.id }})">
                 <div class="name">{{ gen.person_name }} + {{ gen.garment_name }}</div>
-                <div class="meta">
-                    {{ gen.created_at[:16] }}
-                    {% if gen.generation_time %}
-                    | {{ "%.1f"|format(gen.generation_time) }}s
-                    {% endif %}
-                    {% if gen.cost > 0 %}
-                    | ${{ "%.2f"|format(gen.cost) }}
-                    {% endif %}
+                <div class="meta" style="line-height: 1.4;">
+                    <div>📅 {{ gen.created_at }}</div>
+                    <div>
+                        {% if gen.generation_time %}
+                        ⏱️ {{ "%.1f"|format(gen.generation_time) }}s
+                        {% endif %}
+                        {% if gen.cost > 0 %}
+                        | 💰 ${{ "%.2f"|format(gen.cost) }}
+                        {% endif %}
+                    </div>
                 </div>
                 {% if gen.rating > 0 %}
                 <div class="rating">
@@ -166,6 +176,7 @@
             </h2>
 
             <div id="upload-status" class="alert" style="display: none;"></div>
+            <div id="progress-messages" style="display: none; background: #f8f9fa; border-radius: 10px; padding: 1rem; margin-bottom: 1rem; font-family: monospace; font-size: 0.9rem; max-height: 200px; overflow-y: auto;"></div>
 
             <form id="upload-form" enctype="multipart/form-data">
                 <!-- Generation Variants -->
@@ -216,10 +227,14 @@
                             <img id="person-preview" class="preview-image" style="display: none;">
                         </div>
 
-                        <div style="text-align: center; margin-top: 1rem;">
+                        <div style="text-align: center; margin-top: 1rem; display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
                             <button type="button" class="btn" onclick="openWebcam('person')" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
                                 📸 Webcam
                             </button>
+                            <label class="checkbox-group" style="margin: 0;">
+                                <input type="checkbox" id="remove-person-bg" name="remove_person_background" value="true">
+                                <span style="font-size: 0.9rem;">🎨 Odstranit pozadí</span>
+                            </label>
                         </div>
                     </div>
 
@@ -342,6 +357,23 @@
 let currentWebcamTarget = null;
 let webcamStream = null;
 let currentGenerationId = null;
+
+// Progress messages
+function addProgressMessage(message) {
+    const progressDiv = document.getElementById('progress-messages');
+    progressDiv.style.display = 'block';
+    const line = document.createElement('div');
+    line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+    line.style.marginBottom = '0.25rem';
+    progressDiv.appendChild(line);
+    progressDiv.scrollTop = progressDiv.scrollHeight;
+}
+
+function clearProgressMessages() {
+    const progressDiv = document.getElementById('progress-messages');
+    progressDiv.innerHTML = '';
+    progressDiv.style.display = 'none';
+}
 
 // Variant selection
 document.querySelectorAll('.variant-option').forEach(option => {
@@ -494,6 +526,7 @@ function closeWebcam() {
 document.getElementById('upload-form').addEventListener('submit', async (e) => {
     e.preventDefault();
 
+    clearProgressMessages();
     const formData = new FormData(e.target);
     const uploadBtn = document.getElementById('upload-btn');
     const progress = document.getElementById('progress');
@@ -503,12 +536,20 @@ document.getElementById('upload-form').addEventListener('submit', async (e) => {
     progress.style.display = 'block';
     showStatus('⏳ Generování... Může to trvat 30-90 sekund.', 'info');
 
+    addProgressMessage('🚀 Začínám generování...');
+    addProgressMessage('📥 Nahrávám fotky na server...');
+
     let progressInterval = setInterval(() => {
         let currentWidth = parseInt(progressBar.style.width) || 0;
         if (currentWidth < 90) {
             progressBar.style.width = (currentWidth + 1) + '%';
         }
     }, 1000);
+
+    // Simulate progress messages
+    setTimeout(() => addProgressMessage('🎨 Zpracovávám obrázky...'), 2000);
+    setTimeout(() => addProgressMessage('🤖 Volám AI model pro generování...'), 5000);
+    setTimeout(() => addProgressMessage('⏳ Čekám na odpověď backendu (30-90s)...'), 8000);
 
     try {
         const response = await fetch('/upload', {
@@ -517,20 +558,24 @@ document.getElementById('upload-form').addEventListener('submit', async (e) => {
         });
 
         clearInterval(progressInterval);
+        addProgressMessage('✅ Backend odpověděl!');
         const result = await response.json();
 
         if (response.ok && result.success) {
             progressBar.style.width = '100%';
+            addProgressMessage('✅ Hotovo! Zobrazuji výsledek...');
             showStatus('✅ ' + result.message, 'success');
             currentGenerationId = result.generation_id;
             displayResults(result);
             setTimeout(() => location.reload(), 500); // Refresh to update history
         } else {
+            addProgressMessage('❌ Chyba: ' + (result.error || 'Neznámá chyba'));
             showStatus('❌ ' + (result.error || 'Chyba při generování'), 'error');
             progressBar.style.width = '0%';
         }
     } catch (error) {
         clearInterval(progressInterval);
+        addProgressMessage('❌ Chyba spojení: ' + error.message);
         showStatus('❌ Chyba: ' + error.message, 'error');
         progressBar.style.width = '0%';
     } finally {

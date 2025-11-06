@@ -146,6 +146,15 @@ async def root():
     }
 
 
+@app.get("/health")
+async def health():
+    """Simple health check endpoint"""
+    return {
+        "status": "OK",
+        "models_loaded": try_on_model is not None
+    }
+
+
 @app.post("/api/tryon")
 async def try_on(
     person_image: UploadFile = File(..., description="Fotografie osoby (celé tělo)"),

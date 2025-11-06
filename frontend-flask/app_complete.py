@@ -75,45 +75,63 @@ def upload():
         person_image_data = None
         person_path = None
 
+        logger.info("📥 Zpracovávám fotku osoby...")
+
         if 'person_image' in request.files and request.files['person_image'].filename:
             person_file = request.files['person_image']
             person_filename = f"{uuid.uuid4()}_{secure_filename(person_file.filename)}"
             person_path = os.path.join(app.config['UPLOAD_FOLDER'], person_filename)
             person_file.save(person_path)
+            logger.info(f"✅ Fotka osoby uložena: {person_filename}")
         elif 'person_webcam' in request.form and request.form['person_webcam']:
             # Webcam capture (base64 data)
             person_image_data = request.form['person_webcam']
             person_filename = f"{uuid.uuid4()}_webcam.jpg"
             person_path = os.path.join(app.config['UPLOAD_FOLDER'], person_filename)
             save_base64_image(person_image_data, person_path)
+            logger.info("✅ Fotka z webkamery uložena")
         else:
             return jsonify({'success': False, 'error': 'Chybí fotka osoby'}), 400
 
+        # Remove background from person if requested
+        if request.form.get('remove_person_background', 'false') == 'true':
+            logger.info("🎨 Odstraňuji pozadí u osoby...")
+            person_path = remove_background(person_path)
+            logger.info("✅ Pozadí u osoby odstraněno")
+
         # Handle garment image (file, webcam, URL)
         garment_path = None
+
+        logger.info("👕 Zpracovávám fotku oblečení...")
 
         if 'garment_image' in request.files and request.files['garment_image'].filename:
             garment_file = request.files['garment_image']
             garment_filename = f"{uuid.uuid4()}_{secure_filename(garment_file.filename)}"
             garment_path = os.path.join(app.config['UPLOAD_FOLDER'], garment_filename)
             garment_file.save(garment_path)
+            logger.info(f"✅ Fotka oblečení uložena: {garment_filename}")
         elif 'garment_webcam' in request.form and request.form['garment_webcam']:
             garment_image_data = request.form['garment_webcam']
             garment_filename = f"{uuid.uuid4()}_webcam.jpg"
             garment_path = os.path.join(app.config['UPLOAD_FOLDER'], garment_filename)
             save_base64_image(garment_image_data, garment_path)
+            logger.info("✅ Fotka oblečení z webkamery uložena")
         elif 'garment_url' in request.form and request.form['garment_url']:
             garment_url = request.form['garment_url']
             garment_filename = f"{uuid.uuid4()}_url.jpg"
             garment_path = os.path.join(app.config['UPLOAD_FOLDER'], garment_filename)
+            logger.info(f"📥 Stahuji oblečení z URL: {garment_url}")
             download_image_from_url(garment_url, garment_path)
+            logger.info("✅ Oblečení z URL staženo")
         else:
             cleanup_files([person_path])
             return jsonify({'success': False, 'error': 'Chybí fotka oblečení'}), 400
 
         # Remove background if requested
         if request.form.get('remove_background', 'false') == 'true':
+            logger.info("🎨 Odstraňuji pozadí u oblečení...")
             garment_path = remove_background(garment_path)
+            logger.info("✅ Pozadí u oblečení odstraněno")
 
         # Save to database
         gen_id = db.save_generation(
@@ -127,8 +145,13 @@ def upload():
         # Start timing
         start_time = time.time()
 
+        logger.info(f"💾 Ukládám do databáze (ID: {gen_id})...")
+
         # Call backend API
         try:
+            logger.info("🚀 Volám backend API pro generování...")
+            logger.info(f"📍 Backend URL: {BACKEND_API}/api/tryon")
+
             with open(person_path, 'rb') as pf, open(garment_path, 'rb') as gf:
                 files = {
                     'person_image': pf,
@@ -136,6 +159,9 @@ def upload():
                 }
 
                 use_ollama = request.form.get('use_ollama', 'true').lower() == 'true'
+                logger.info(f"🤖 Ollama: {use_ollama}")
+
+                logger.info("⏳ Čekám na odpověď z backendu (může trvat 30-120s)...")
                 response = requests.post(
                     f'{BACKEND_API}/api/tryon',
                     files=files,
@@ -144,6 +170,7 @@ def upload():
                 )
 
             generation_time = time.time() - start_time
+            logger.info(f"✅ Backend odpověděl za {generation_time:.1f}s - Status: {response.status_code}")
 
             if response.status_code == 200:
                 result = response.json()
