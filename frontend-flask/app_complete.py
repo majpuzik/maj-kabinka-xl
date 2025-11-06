@@ -106,9 +106,21 @@ def upload():
 
         if 'garment_image' in request.files and request.files['garment_image'].filename:
             garment_file = request.files['garment_image']
-            garment_filename = f"{uuid.uuid4()}_{secure_filename(garment_file.filename)}"
-            garment_path = os.path.join(app.config['UPLOAD_FOLDER'], garment_filename)
-            garment_file.save(garment_path)
+            original_filename = secure_filename(garment_file.filename)
+
+            # Convert AVIF/WEBP to JPG
+            if original_filename.lower().endswith(('.avif', '.webp')):
+                logger.info(f"🔄 Konvertuji {original_filename} na JPG...")
+                from PIL import Image
+                import io
+                img = Image.open(garment_file.stream).convert('RGB')
+                garment_filename = f"{uuid.uuid4()}.jpg"
+                garment_path = os.path.join(app.config['UPLOAD_FOLDER'], garment_filename)
+                img.save(garment_path, 'JPEG', quality=95)
+            else:
+                garment_filename = f"{uuid.uuid4()}_{original_filename}"
+                garment_path = os.path.join(app.config['UPLOAD_FOLDER'], garment_filename)
+                garment_file.save(garment_path)
             logger.info(f"✅ Fotka oblečení uložena: {garment_filename}")
         elif 'garment_webcam' in request.form and request.form['garment_webcam']:
             garment_image_data = request.form['garment_webcam']
